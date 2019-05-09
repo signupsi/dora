@@ -899,6 +899,14 @@ impl<'a, 'ast> TypeCheck<'a, 'ast> {
         }
     }
 
+    fn check_expr_path(&mut self, _e: &'ast ExprPathType) {
+        unimplemented!();
+    }
+
+    fn check_expr_type_param(&mut self, _e: &'ast ExprTypeParamType) {
+        unimplemented!();
+    }
+
     fn check_expr_delegation(&mut self, e: &'ast ExprDelegationType) {
         let arg_types: Vec<BuiltinType> = e
             .args
@@ -1034,10 +1042,22 @@ impl<'a, 'ast> TypeCheck<'a, 'ast> {
         self.expr_type = BuiltinType::Unit;
     }
 
-    fn check_expr_field(&mut self, e: &'ast ExprFieldType) {
-        self.visit_expr(&e.object);
-
+    fn check_expr_dot(&mut self, e: &'ast ExprDotType) {
+        self.visit_expr(&e.lhs);
         let ty = self.expr_type;
+
+        let ident_name;
+
+        if let Some(ident_expr) = e.rhs.to_ident() {
+            ident_name = ident_expr.name;
+        } else {
+            let msg = Msg::InvalidUseOfDot;
+            self.ctxt.diag.lock().report_without_path(e.pos, msg);
+
+            self.src.set_ty(e.id, BuiltinType::Error);
+            self.expr_type = BuiltinType::Error;
+            return;
+        }
 
         let cls_id = ty.cls_id(self.ctxt);
 
@@ -1045,10 +1065,9 @@ impl<'a, 'ast> TypeCheck<'a, 'ast> {
             let cls = self.ctxt.classes.idx(cls_id);
             let cls = cls.read();
 
-            if let Some((cls_id, field_id)) = cls.find_field(self.ctxt, e.name) {
+            if let Some((cls_id, field_id)) = cls.find_field(self.ctxt, ident_name) {
                 let ty = match ty {
                     BuiltinType::Class(_, list_id) => BuiltinType::Class(cls_id, list_id),
-
                     _ => unreachable!(),
                 };
 
@@ -1073,7 +1092,7 @@ impl<'a, 'ast> TypeCheck<'a, 'ast> {
         }
 
         // field not found, report error
-        let field_name = self.ctxt.interner.str(e.name).to_string();
+        let field_name = self.ctxt.interner.str(ident_name).to_string();
         let expr_name = ty.name(self.ctxt);
         let msg = Msg::UnknownField(field_name, expr_name);
         self.ctxt.diag.lock().report_without_path(e.pos, msg);
@@ -1362,8 +1381,10 @@ impl<'a, 'ast> Visitor<'ast> for TypeCheck<'a, 'ast> {
             ExprUn(ref expr) => self.check_expr_un(expr),
             ExprBin(ref expr) => self.check_expr_bin(expr),
             ExprCall(ref expr) => self.check_expr_call(expr, false),
+            ExprDot(ref expr) => self.check_expr_dot(expr),
+            ExprPath(ref expr) => self.check_expr_path(expr),
+            ExprTypeParam(ref expr) => self.check_expr_type_param(expr),
             ExprDelegation(ref expr) => self.check_expr_delegation(expr),
-            ExprField(ref expr) => self.check_expr_field(expr),
             ExprSelf(ref expr) => self.check_expr_this(expr),
             ExprSuper(ref expr) => self.check_expr_super(expr),
             ExprNil(ref expr) => self.check_expr_nil(expr),

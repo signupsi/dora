@@ -73,6 +73,7 @@ pub enum Msg {
     ExpectedTrait(String),
     ExpectedType(String),
     ExpectedIdentifier(String),
+    InvalidUseOfDot,
     MisplacedElse,
     IoError,
     ExpectedClassElement(String),
@@ -257,6 +258,7 @@ impl Msg {
             ExpectedTrait(ref trt) => format!("expected trait name but got {}.", trt),
             ExpectedType(ref got) => format!("type expected but got {}.", got),
             ExpectedIdentifier(ref tok) => format!("identifier expected but got {}.", tok),
+            InvalidUseOfDot => "identifier expected after dot".into(),
             MisplacedModifier(ref modifier) => format!("misplaced modifier `{}`.", modifier),
             ExpectedTopLevelElement(ref token) => {
                 format!("expected function or class but got {}.", token)

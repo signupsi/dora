@@ -1221,9 +1221,11 @@ pub enum Expr {
     ExprLitStruct(ExprLitStructType),
     ExprIdent(ExprIdentType),
     ExprCall(ExprCallType),
+    ExprTypeParam(ExprTypeParamType),
+    ExprPath(ExprPathType),
+    ExprDot(ExprDotType),
     ExprDelegation(ExprDelegationType),
     ExprAssign(ExprAssignType),
-    ExprField(ExprFieldType),
     ExprSelf(ExprSelfType),
     ExprSuper(ExprSuperType),
     ExprNil(ExprNilType),
@@ -1362,32 +1364,35 @@ impl Expr {
 
     pub fn create_ident(id: NodeId,
                         pos: Position,
-                        name: Name,
-                        type_params: Option<Vec<Type>>)
+                        name: Name)
                         -> Expr {
         Expr::ExprIdent(ExprIdentType {
                             id: id,
                             pos: pos,
                             name: name,
-                            type_params: type_params,
                         })
     }
 
     pub fn create_call(id: NodeId,
-                       pos: Position,
-                       path: Path,
-                       object: Option<Box<Expr>>,
-                       args: Vec<Box<Expr>>,
-                       type_params: Option<Vec<Type>>)
-                       -> Expr {
+                           pos: Position,
+                           callee: Box<Expr>,
+                           args: Vec<Box<Expr>>)
+                           -> Expr {
         Expr::ExprCall(ExprCallType {
                            id: id,
                            pos: pos,
-                           path: path,
+                           callee: callee,
                            args: args,
-                           object: object,
-                           type_params: type_params,
                        })
+    }
+
+    pub fn create_type_param(id: NodeId, pos: Position, callee: Box<Expr>, args: Vec<Type>) -> Expr {
+        Expr::ExprTypeParam(ExprTypeParamType {
+            id: id,
+            pos: pos,
+            callee: callee,
+            args: args,
+        })
     }
 
     pub fn create_delegation(id: NodeId,
@@ -1412,15 +1417,6 @@ impl Expr {
                          })
     }
 
-    pub fn create_field(id: NodeId, pos: Position, object: Box<Expr>, name: Name) -> Expr {
-        Expr::ExprField(ExprFieldType {
-                            id: id,
-                            pos: pos,
-                            object: object,
-                            name: name,
-                        })
-    }
-
     pub fn create_lambda(id: NodeId,
                          pos: Position,
                          params: Vec<Param>,
@@ -1434,6 +1430,24 @@ impl Expr {
                              ret: ret,
                              block: block,
                          })
+    }
+
+    pub fn create_path(id: NodeId, pos: Position, lhs: Box<Expr>, rhs: Box<Expr>) -> Expr {
+        Expr::ExprPath(ExprPathType {
+            id: id,
+            pos: pos,
+            lhs: lhs,
+            rhs: rhs,
+        })
+    }
+
+    pub fn create_dot(id: NodeId, pos: Position, lhs: Box<Expr>, rhs: Box<Expr>) -> Expr {
+        Expr::ExprDot(ExprDotType {
+            id: id,
+            pos: pos,
+            lhs: lhs,
+            rhs: rhs,
+        })
     }
 
     pub fn to_un(&self) -> Option<&ExprUnType> {
@@ -1460,6 +1474,20 @@ impl Expr {
     pub fn is_bin(&self) -> bool {
         match *self {
             Expr::ExprBin(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn to_path(&self) -> Option<&ExprPathType> {
+        match *self {
+            Expr::ExprPath(ref val) => Some(val),
+            _ => None,
+        }
+    }
+
+    pub fn is_path(&self) -> bool {
+        match *self {
+            Expr::ExprPath(_) => true,
             _ => false,
         }
     }
@@ -1502,6 +1530,20 @@ impl Expr {
     pub fn is_call(&self) -> bool {
         match *self {
             Expr::ExprCall(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn to_dot(&self) -> Option<&ExprDotType> {
+        match *self {
+            Expr::ExprDot(ref val) => Some(val),
+            _ => None,
+        }
+    }
+
+    pub fn is_dot(&self) -> bool {
+        match *self {
+            Expr::ExprDot(_) => true,
             _ => false,
         }
     }
@@ -1586,20 +1628,6 @@ impl Expr {
     pub fn is_lit_true(&self) -> bool {
         match *self {
             Expr::ExprLitBool(ref lit) if lit.value => true,
-            _ => false,
-        }
-    }
-
-    pub fn to_field(&self) -> Option<&ExprFieldType> {
-        match *self {
-            Expr::ExprField(ref val) => Some(val),
-            _ => None,
-        }
-    }
-
-    pub fn is_field(&self) -> bool {
-        match *self {
-            Expr::ExprField(_) => true,
             _ => false,
         }
     }
@@ -1715,8 +1743,10 @@ impl Expr {
             Expr::ExprIdent(ref val) => val.pos,
             Expr::ExprAssign(ref val) => val.pos,
             Expr::ExprCall(ref val) => val.pos,
+            Expr::ExprDot(ref val) => val.pos,
+            Expr::ExprTypeParam(ref val) => val.pos,
+            Expr::ExprPath(ref val) => val.pos,
             Expr::ExprDelegation(ref val) => val.pos,
-            Expr::ExprField(ref val) => val.pos,
             Expr::ExprSelf(ref val) => val.pos,
             Expr::ExprSuper(ref val) => val.pos,
             Expr::ExprNil(ref val) => val.pos,
@@ -1740,8 +1770,10 @@ impl Expr {
             Expr::ExprIdent(ref val) => val.id,
             Expr::ExprAssign(ref val) => val.id,
             Expr::ExprCall(ref val) => val.id,
+            Expr::ExprDot(ref val) => val.id,
+            Expr::ExprTypeParam(ref val) => val.id,
+            Expr::ExprPath(ref val) => val.id,
             Expr::ExprDelegation(ref val) => val.id,
-            Expr::ExprField(ref val) => val.id,
             Expr::ExprSelf(ref val) => val.id,
             Expr::ExprSuper(ref val) => val.id,
             Expr::ExprNil(ref val) => val.id,
@@ -1949,7 +1981,6 @@ pub struct ExprIdentType {
     pub pos: Position,
 
     pub name: Name,
-    pub type_params: Option<Vec<Type>>,
 }
 
 #[derive(Clone, Debug)]
@@ -1996,10 +2027,35 @@ pub struct ExprCallType {
     pub id: NodeId,
     pub pos: Position,
 
-    pub path: Path,
-    pub object: Option<Box<Expr>>,
+    pub callee: Box<Expr>,
     pub args: Vec<Box<Expr>>,
-    pub type_params: Option<Vec<Type>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExprTypeParamType {
+    pub id: NodeId,
+    pub pos: Position,
+
+    pub callee: Box<Expr>,
+    pub args: Vec<Type>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExprDotType {
+    pub id: NodeId,
+    pub pos: Position,
+
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExprPathType {
+    pub id: NodeId,
+    pub pos: Position,
+
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
 }
 
 #[derive(Clone, Debug)]
@@ -2009,13 +2065,4 @@ pub struct ExprAssignType {
 
     pub lhs: Box<Expr>,
     pub rhs: Box<Expr>,
-}
-
-#[derive(Clone, Debug)]
-pub struct ExprFieldType {
-    pub id: NodeId,
-    pub pos: Position,
-
-    pub object: Box<Expr>,
-    pub name: Name,
 }

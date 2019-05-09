@@ -408,7 +408,6 @@ impl<'a> AstDumper<'a> {
         match *expr {
             ExprUn(ref un) => self.dump_expr_un(un),
             ExprBin(ref bin) => self.dump_expr_bin(bin),
-            ExprField(ref field) => self.dump_expr_field(field),
             ExprArray(ref array) => self.dump_expr_array(array),
             ExprLitChar(ref lit) => self.dump_expr_lit_char(lit),
             ExprLitInt(ref lit) => self.dump_expr_lit_int(lit),
@@ -419,6 +418,9 @@ impl<'a> AstDumper<'a> {
             ExprIdent(ref ident) => self.dump_expr_ident(ident),
             ExprAssign(ref assign) => self.dump_expr_assign(assign),
             ExprCall(ref call) => self.dump_expr_call(call),
+            ExprDot(ref call) => self.dump_expr_dot(call),
+            ExprTypeParam(ref types) => self.dump_expr_type_param(types),
+            ExprPath(ref path) => self.dump_expr_path(path),
             ExprDelegation(ref call) => self.dump_expr_delegation(call),
             ExprSelf(ref selfie) => self.dump_expr_self(selfie),
             ExprSuper(ref expr) => self.dump_expr_super(expr),
@@ -518,6 +520,12 @@ impl<'a> AstDumper<'a> {
         self.indent(|d| d.dump_expr(&expr.lhs));
     }
 
+    fn dump_expr_path(&mut self, expr: &ExprPathType) {
+        self.indent(|d| d.dump_expr(&expr.rhs));
+        dump!(self, "path @ {} {}", expr.pos, expr.id);
+        self.indent(|d| d.dump_expr(&expr.lhs));
+    }
+
     fn dump_expr_array(&mut self, expr: &ExprArrayType) {
         self.indent(|d| d.dump_expr(&expr.object));
         dump!(self, "[] @ {} {}", expr.pos, expr.id);
@@ -529,36 +537,46 @@ impl<'a> AstDumper<'a> {
         self.indent(|d| d.dump_stmt(&expr.block));
     }
 
-    fn dump_expr_field(&mut self, field: &ExprFieldType) {
-        dump!(self,
-              "field {} @ {} {}",
-              self.str(field.name),
-              field.pos,
-              field.id);
-        self.indent(|d| d.dump_expr(&field.object));
-    }
-
     fn dump_expr_assign(&mut self, expr: &ExprAssignType) {
         self.indent(|d| d.dump_expr(&expr.rhs));
         dump!(self, "assign (=) @ {} {}", expr.pos, expr.id);
         self.indent(|d| d.dump_expr(&expr.lhs));
     }
 
+    fn dump_expr_dot(&mut self, expr: &ExprDotType) {
+        self.indent(|d| d.dump_expr(&expr.rhs));
+        dump!(self, "dot @ {} {}", expr.pos, expr.id);
+        self.indent(|d| d.dump_expr(&expr.lhs));
+    }
+
     fn dump_expr_call(&mut self, expr: &ExprCallType) {
         dump!(self,
-              "call {} @ {} {}",
-              self.str(expr.path[0]),
+              "call @ {} {}",
               expr.pos,
               expr.id);
 
         self.indent(|d| {
-            if let Some(ref object) = expr.object {
-                dump!(d, "object");
-                d.indent(|d| d.dump_expr(object));
-            }
+            dump!(d, "callee");
+            d.indent(|d| d.dump_expr(&expr.callee));
 
             for arg in &expr.args {
                 d.dump_expr(arg);
+            }
+        });
+    }
+
+    fn dump_expr_type_param(&mut self, expr: &ExprTypeParamType) {
+        dump!(self,
+              "type param @ {} {}",
+              expr.pos,
+              expr.id);
+
+        self.indent(|d| {
+            dump!(d, "callee");
+            d.indent(|d| d.dump_expr(&expr.callee));
+
+            for ty in &expr.args {
+                d.dump_type(ty);
             }
         });
     }

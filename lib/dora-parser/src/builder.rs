@@ -42,15 +42,15 @@ impl<'a> Builder<'a> {
                                   }))
     }
 
-    pub fn build_field(&self, object: Box<Expr>, name: Name) -> Box<Expr> {
+    pub fn build_dot(&self, lhs: Box<Expr>, rhs: Box<Expr>) -> Box<Expr> {
         let id = self.id_generator.next();
 
-        Box::new(Expr::ExprField(ExprFieldType {
-                                     id: id,
-                                     pos: Position::new(1, 1),
-                                     object: object,
-                                     name: name,
-                                 }))
+        Box::new(Expr::ExprDot(ExprDotType {
+                                    id: id,
+                                    pos: Position::new(1, 1),
+                                    lhs: lhs,
+                                    rhs: rhs,
+                                }))
     }
 
     pub fn build_ident(&self, name: Name) -> Box<Expr> {
@@ -60,7 +60,6 @@ impl<'a> Builder<'a> {
                                      id: id,
                                      pos: Position::new(1, 1),
                                      name: name,
-                                     type_params: None,
                                  }))
     }
 

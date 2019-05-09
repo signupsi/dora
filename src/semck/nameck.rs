@@ -249,6 +249,10 @@ impl<'a, 'ast> NameCheck<'a, 'ast> {
                 return;
             }
 
+            Some(SymFct(id)) => {
+                self.src.map_idents.insert(ident.id, IdentType::Fct(id));
+            }
+
             None | Some(_) => {
                 // do nothing
             }
@@ -259,56 +263,16 @@ impl<'a, 'ast> NameCheck<'a, 'ast> {
     }
 
     fn check_expr_call(&mut self, call: &'ast ExprCallType) {
-        let mut found = false;
-
-        // do not check method calls yet
-        if let Some(ref object) = call.object {
-            self.visit_expr(object);
-
-            for arg in &call.args {
-                self.visit_expr(arg);
-            }
-
-            return;
-        }
-
-        if call.path.len() > 1 {
-            for arg in &call.args {
-                self.visit_expr(arg);
-            }
-
-            return;
-        }
-
-        let name = call.path.name();
-
-        if let Some(sym) = self.ctxt.sym.lock().get(name) {
-            match sym {
-                SymFct(fct_id) => {
-                    let call_type = CallType::Fct(fct_id, TypeParams::empty(), TypeParams::empty());
-                    self.src.map_calls.insert(call.id, Arc::new(call_type));
-                    found = true;
-                }
-
-                SymClass(cls_id) => {
-                    let call_type = CallType::CtorNew(cls_id, FctId(0), TypeParams::empty());
-                    self.src.map_calls.insert(call.id, Arc::new(call_type));
-                    found = true;
-                }
-
-                _ => {}
-            }
-        }
-
-        if !found {
-            let name = str(self.ctxt, name);
-            report(self.ctxt, call.pos, Msg::UnknownFunction(name));
-        }
+        self.visit_expr(&call.callee);
 
         // also parse function arguments
         for arg in &call.args {
             self.visit_expr(arg);
         }
+    }
+
+    fn check_expr_dot(&mut self, expr: &'ast ExprDotType) {
+        self.visit_expr(&expr.lhs);
     }
 
     fn check_expr_struct(&mut self, struc: &'ast ExprLitStructType) {

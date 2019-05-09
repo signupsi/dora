@@ -143,8 +143,10 @@ where
             ExprAssign(ref expr) => self.emit_assign(expr),
             ExprBin(ref expr) => self.emit_bin(expr, dest),
             ExprCall(ref expr) => self.emit_call(expr, dest),
+            ExprTypeParam(_) => unimplemented!(),
+            ExprPath(_) => unimplemented!(),
             ExprDelegation(ref expr) => self.emit_delegation(expr, dest),
-            ExprField(ref expr) => self.emit_field(expr, dest),
+            ExprDot(ref expr) => self.emit_dot(expr, dest),
             ExprSelf(_) => self.emit_self(dest.reg()),
             ExprSuper(_) => self.emit_self(dest.reg()),
             ExprNil(_) => self.emit_nil(dest.reg()),
@@ -437,7 +439,7 @@ where
         self.asm.load_nil(dest);
     }
 
-    fn emit_field(&mut self, expr: &'ast ExprFieldType, dest: ExprStore) {
+    fn emit_dot(&mut self, expr: &'ast ExprDotType, dest: ExprStore) {
         let (ty, field) = {
             let ident_type = self.src.map_idents.get(expr.id).unwrap();
 

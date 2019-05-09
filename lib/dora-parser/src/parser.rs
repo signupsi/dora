@@ -1079,32 +1079,32 @@ impl<'a> Parser<'a> {
             left = match self.token.kind {
                 TokenKind::Dot => {
                     let tok = self.advance_token()?;
-                    let ident = self.expect_identifier()?;
+                    let rhs = self.parse_expression()?;
 
-                    let type_params = if self.token.is(TokenKind::Sep) {
-                        self.advance_token()?;
-                        self.expect_token(TokenKind::Lt)?;
-
-                        Some(self.parse_comma_list(TokenKind::Gt, |p| p.parse_type())?)
-                    } else {
-                        None
-                    };
-
-                    if self.token.is(TokenKind::LParen) {
-                        self.parse_call(tok.position, Some(left), Path::new(ident), type_params)?
-
-                    } else {
-                        assert!(type_params.is_none());
-                        Box::new(Expr::create_field(self.generate_id(), tok.position, left, ident))
-                    }
+                    Box::new(Expr::create_dot(self.generate_id(), tok.position, left, rhs))
                 }
 
                 TokenKind::LBracket => {
                     let tok = self.advance_token()?;
-                    let index = self.parse_expression()?;
+                    let args = self.parse_comma_list(TokenKind::RBracket, |p| p.parse_type())?;
                     self.expect_token(TokenKind::RBracket)?;
 
-                    Box::new(Expr::create_array(self.generate_id(), tok.position, left, index))
+                    Box::new(Expr::create_type_param(self.generate_id(), tok.position, left, args))
+                }
+
+                TokenKind::LParen => {
+                    let tok = self.advance_token()?;
+                    let args = self.parse_comma_list(TokenKind::RParen, |p| p.parse_expression())?;
+                    self.expect_token(TokenKind::RParen)?;
+
+                    Box::new(Expr::create_call(self.generate_id(), tok.position, left, args))
+                }
+
+                TokenKind::Sep => {
+                    let tok = self.advance_token()?;
+                    let rhs = self.parse_expression()?;
+
+                    Box::new(Expr::create_path(self.generate_id(), tok.position, left, rhs))
                 }
 
                 _ => {
@@ -1154,7 +1154,7 @@ impl<'a> Parser<'a> {
             TokenKind::LitInt(_, _, _) => self.parse_lit_int(),
             TokenKind::LitFloat(_, _) => self.parse_lit_float(),
             TokenKind::String(_) => self.parse_string(),
-            TokenKind::Identifier(_) => self.parse_identifier_or_call(opts),
+            TokenKind::Identifier(_) => self.parse_identifier(opts),
             TokenKind::True => self.parse_bool_literal(),
             TokenKind::False => self.parse_bool_literal(),
             TokenKind::Nil => self.parse_nil(),
@@ -1171,41 +1171,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_identifier_or_call(&mut self, opts: &ExprParsingOpts) -> ExprResult {
+    fn parse_identifier(&mut self, opts: &ExprParsingOpts) -> ExprResult {
         let pos = self.token.position;
-        let mut path = vec![self.expect_identifier()?];
-        let mut type_params = None;
+        let name = self.expect_identifier()?;
 
-        while self.token.is(TokenKind::Sep) {
-            self.advance_token()?;
-
-            if self.token.is(TokenKind::Lt) {
-                self.expect_token(TokenKind::Lt)?;
-
-                let params = self.parse_comma_list(TokenKind::Gt, |p| p.parse_type())?;
-                type_params = Some(params);
-                break;
-
-            } else {
-                let ident = self.expect_identifier()?;
-                path.push(ident);
-            }
-        }
-
-        // is this a function call?
-        if self.token.is(TokenKind::LParen) {
-            self.parse_call(pos, None, Path { path: path }, type_params)
-
-        } else if self.token.is(TokenKind::LBrace) && opts.parse_struct_lit {
-            assert!(type_params.is_none());
-            self.parse_lit_struct(pos, Path { path: path })
-
-            // if not we have a simple identifier
-        } else {
-            assert_eq!(1, path.len());
-            let name = path[0];
-            Ok(Box::new(Expr::create_ident(self.generate_id(), pos, name, type_params)))
-        }
+        Ok(Box::new(Expr::create_ident(self.generate_id(), pos, name)))
     }
 
     fn parse_lit_struct(&mut self, pos: Position, path: Path) -> ExprResult {
@@ -1229,19 +1199,6 @@ impl<'a> Parser<'a> {
                name: name,
                expr: expr,
            })
-    }
-
-    fn parse_call(&mut self,
-                  pos: Position,
-                  object: Option<Box<Expr>>,
-                  path: Path,
-                  type_params: Option<Vec<Type>>)
-                  -> ExprResult {
-        self.expect_token(TokenKind::LParen)?;
-
-        let args = self.parse_comma_list(TokenKind::RParen, |p| p.parse_expression())?;
-
-        Ok(Box::new(Expr::create_call(self.generate_id(), pos, path, object, args, type_params)))
     }
 
     fn parse_parentheses(&mut self) -> ExprResult {
@@ -1464,7 +1421,8 @@ impl<'a> Parser<'a> {
 
         for param in ctor_params.iter().filter(|param| param.field) {
             let this = builder.build_this();
-            let lhs = builder.build_field(this, param.name);
+            let field_name = builder.build_ident(param.name);
+            let lhs = builder.build_dot(this, field_name);
             let rhs = builder.build_ident(param.name);
             let ass = builder.build_assign(lhs, rhs);
 
@@ -1473,7 +1431,8 @@ impl<'a> Parser<'a> {
 
         for field in cls.fields.iter().filter(|field| field.expr.is_some()) {
             let this = builder.build_this();
-            let lhs = builder.build_field(this, field.name);
+            let field_name = builder.build_ident(field.name);
+            let lhs = builder.build_dot(this, field_name);
             let ass = builder.build_assign(lhs, field.expr.as_ref().unwrap().clone());
 
             block.add_expr(ass);
